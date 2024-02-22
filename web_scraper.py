@@ -27,7 +27,6 @@ driver.get('https://www.imdb.com/chart/starmeter/')
 # Creating a blank list for our results
 name = []
 known_for = []
-picture = []
 
 # Add the page source to the variable 'content'
 content = driver.page_source
@@ -58,29 +57,112 @@ for element in soup.find_all(attrs={'class': 'ipc-link ipc-link--base sc-a3c468b
 
 # No need to clean the known_for data
 
-# Searching google images and returning a url of the first result for the celebrity since the thumbnail on the imdb page is too small
-for element in name:
-    # Setting the search parameters
-    search_params = {
-        'q': element + ' imdb',       # what we are searching for
-        'num': 1,
-        'fileType': 'jpg'
-    }
+def get_picture(name):
+    '''list of strings -> list of strings
 
-    # Executing the search
-    gis.search(search_params = search_params)
-    # Storing the results
-    for i in gis.results():
-        # Extracting the image url which is the only thing we want
-        picture.append(i.url)
-        print(element, i.url)
+    This is a function that takes an input of celebrity names and returns a url
+    to a picture of each celebrity
+    '''
+    name_error = []
+    picture = []
+    error_num = 0       # If this number remains 0 then no errors have occurred, if the number changes to 1 then an HTTPError 500 has occurred but the code
+    # can continue. If the number changes to 2, then there is a problem with the API credentials, either they are incorrect or daily quotas have been reached
 
-        #time.sleep(15)
+    # Searching google images and returning a url of the first result for the celebrity
+    for element in name:
+        # Setting the search parameters
+        search_params = {
+            'q': element + ' imdb',       # what we are searching for
+            'num': 1,
+            'fileType': 'jpg'
+        }
 
-for x in picture:
-    print(x)
+        # This code returns errors occasionally due to issues with google's backend servers
+        # Adding error handling to mitigate this
+        try:
+            # Executing the search
+            gis.search(search_params = search_params)
+            # Storing the results
+            for i in gis.results():
 
+                # Extracting the image url which is the only thing we want
+                picture.append(i.url)
+                print(element, i.url)
+        except Exception as error:
+            error_string = str(error)
+            if "HttpError 500" in error_string:
+                print(f"HttpError 500 occurred processing {element}, continuing with list")
+                picture.append('NaN')
+                name_error.append(element)
+                error_num = 1
+                continue
+            else:
+                print("An error occurred due to a problem with the credentials. Please check the credentials are correct"
+                       " and your queries per day has not been reached")
+                picture.append('NaN')
+                name_error.append(element)
+                error_num = 2
 
+    return picture, name_error, error_num
+
+def get_picture_error(name, picture, name_error, error_num):
+    '''list of strings -> list of strings
+    This method does the same thing as get_picture except it only finds the names that have created errors
+    name is the full list of actors names
+    picture is the full list of images associated with each actor
+    name_error is the full list of actors that were not able to be completed due to errors
+    '''
+    print("Names detected in name_error, retrieving images for them")
+    # Searching google images and returning a url of the first result for the celebrity
+    for element in name:
+        if element in name_error:
+            # Setting the search parameters
+            search_params = {
+                'q': element + ' imdb',       # what we are searching for
+                'num': 1,
+                'fileType': 'jpg'
+            }
+
+            # This code returns errors occasionally due to issues with google's backend servers
+            # Adding error handling to mitigate this
+            try:
+                # Executing the search
+                gis.search(search_params = search_params)
+                # Storing the results
+                for i in gis.results():
+                    # Extracting the image url which is the only thing we want and replacing the NaN
+                    # That was stored there
+                    picture.replace(i.url)
+                    print(element, i.url)
+                    # Removing the name from the element when it gets a picture associated with it
+                    name_error.remove(element)
+            except Exception as error:
+                error_string = str(error)
+                if "HttpError 500" in error_string:
+                    print(f"HttpError 500 occurred processing {element}, continuing with list")
+                    continue
+                else:
+                    print("An error occurred due to a problem with the credentials. Please check the credentials are correct"
+                           " and your queries per day has not been reached")
+                    error_num = 2
+        
+        else:
+            continue
+    
+    # If name_error list is blank after the loop has occurred then error_num is set to 0 and the function stops
+    if not name_error:
+        error_num = 0
+
+    return picture, name_error, error_num
+    
+
+picture, name_error, error_num = get_picture(name)
+print(name_error)
+
+while error_num == 1:
+    picture, name_error, error_num = get_picture_error(name, picture, name_error, error_num)
+    if error_num == 2:
+        pass
 
 # Exporting the results into a csv file using Pandas, where Names, Known For, and Picture are the names of the columns
 df = pd.DataFrame({'Names': name, 'Known For': known_for, 'Picture': picture})
